@@ -23,13 +23,12 @@ HEADERS = {
     "Upgrade-Insecure-Requests": "1"
 }
 
-# Thematic catalyst taxonomy
 CATALYST_TAXONOMY = {
     "Capital Goods & Defense": {
         "keywords": ["defense", "aerospace", "valve", "pump", "casting", "forging", "machining", "cnc", "industrial machinery", "tool"],
         "tailwinds": [
-            "Localization & Import Substitution: Direct beneficiary of defense indigenization and Make in India.",
-            "Capex Cycle: Operating leverage accelerating as domestic factory utilization approaches peaks."
+            "Localization & Indigenization: Direct beneficiary of defense indigenization and Make in India.",
+            "Capex Cycle: Operating leverage accelerating as domestic factory utilization approaches peak levels."
         ]
     },
     "Power, Solar & Green Transition": {
@@ -42,7 +41,7 @@ CATALYST_TAXONOMY = {
     "Chemicals & Specialized Materials": {
         "keywords": ["chemical", "specialty chemical", "intermediate", "agrochem", "api", "pharma", "polymer"],
         "tailwinds": [
-            "China+1 De-risking: Global supply chains diversifying strategic chemical intermediate sourcing.",
+            "China+1 Sourcing: Global supply chains diversifying strategic chemical intermediate sourcing.",
             "Margin Expansion: Raw material input normalization driving earnings recovery."
         ]
     },
@@ -104,13 +103,13 @@ def send_telegram_alert(message: str) -> bool:
 
 def get_company_profile(session: requests.Session, company_path: str) -> tuple[str, str]:
     if not company_path:
-        return "Niche Manufacturing", "Supplier to core industrial sectors."
+        return "Industrial Ancillary", "Supplier to core industrial sectors."
         
     full_url = BASE_URL + company_path if company_path.startswith("/") else f"{BASE_URL}/{company_path}"
     try:
         resp = session.get(full_url, timeout=10)
         if resp.status_code != 200:
-            return "Niche Manufacturing", "Supplier to core industrial sectors."
+            return "Industrial Ancillary", "Supplier to core industrial sectors."
             
         soup = BeautifulSoup(resp.text, "html.parser")
         
@@ -122,7 +121,7 @@ def get_company_profile(session: requests.Session, company_path: str) -> tuple[s
                 sector = sector_tag.get_text(strip=True)
 
         about_div = soup.find("div", class_="about") or soup.find("div", class_="company-profile")
-        description = "Industrial supplier"
+        description = "Supplier to core industrial sectors."
         if about_div:
             p_tag = about_div.find("p")
             if p_tag:
@@ -217,46 +216,52 @@ def fetch_screener_stocks(url: str) -> tuple[list[dict], requests.Session]:
         
     return stocks, session
 
-def passes_conviction_gate(stock: dict) -> tuple[bool, float, str]:
-    """
-    Hard filtration logic to discard low-conviction/microcap traps:
-    1. Cash from operations MUST be strictly positive.
-    2. CFO must convert at least 50% of annualized earnings.
-    3. Quarterly profit growth must show positive operational expansion (>20%).
-    4. Market cap must be sane (> ₹25 Cr to eliminate pure penny/shell tickers).
-    """
+def calculate_conviction_score(stock: dict) -> tuple[bool, float]:
     cfo = clean_float(stock.get("cfo", "0"))
     pat = clean_float(stock.get("pat", "0"))
     growth = clean_float(stock.get("profit_growth", "0"))
     mcap = clean_float(stock.get("mcap", "0"))
     pe = clean_float(stock.get("pe", "0"))
 
-    annualized_pat = pat * 4
+    # Base sanity guardrails
+    if mcap < 10.0 or (pe > 40.0 and pe > 0):
+        return False, 0.0
 
-    # Disqualification checks
-    if mcap < 25.0:
-        return False, 0.0, "Sub-scale penny ticker (MCap < ₹25 Cr)"
-    if cfo <= 0:
-        return False, 0.0, "Accounting Trap: Zero or negative Operating Cash Flow"
-    if annualized_pat > 0 and (cfo / annualized_pat) < 0.50:
-        return False, 0.0, "Weak Cash Conversion: <50% CFO to PAT"
-    if growth < 20.0:
-        return False, 0.0, "Insufficient earnings velocity (<20% PAT growth)"
-    if pe <= 0 or pe > 30.0:
-        return False, 0.0, "Valuation outside sweet spot"
-
-    # Multibagger conviction score calculation
     score = 0.0
-    # Growth factor (up to 40 pts)
-    score += min(growth, 100.0) * 0.40
-    # Cash conversion factor (up to 30 pts)
-    conversion = min((cfo / annualized_pat), 2.0) if annualized_pat > 0 else 0.5
-    score += conversion * 15.0
-    # Valuation cushion (lower P/E gets up to 30 pts)
-    if 5 <= pe <= 20:
-        score += (25 - pe) * 1.5
 
-    return True, score, "Qualified"
+    # 1. Growth Velocity (Max 40 points)
+    if growth >= 30.0:
+        score += 40.0
+    elif growth >= 15.0:
+        score += 25.0
+    elif growth > 0.0:
+        score += 15.0
+    else:
+        score += 5.0
+
+    # 2. Valuation Expansion Runway (Max 30 points)
+    if 5.0 <= pe <= 16.0:
+        score += 30.0
+    elif 16.0 < pe <= 26.0:
+        score += 20.0
+    else:
+        score += 10.0
+
+    # 3. Cash Reality Check (Max 30 points)
+    annualized_pat = pat * 4 if pat > 0 else 1.0
+    if cfo > 0:
+        conversion = (cfo / annualized_pat) if annualized_pat > 0 else 0
+        if conversion >= 0.5:
+            score += 30.0
+        elif conversion >= 0.2:
+            score += 20.0
+        else:
+            score += 10.0
+    else:
+        score -= 5.0
+
+    passes_strict = (score >= 45.0) and (cfo > 0)
+    return passes_strict, score
 
 def identify_structural_catalyst(sector: str, description: str, stock: dict) -> tuple[str, list[str]]:
     text = (sector + " " + description).lower()
@@ -271,38 +276,39 @@ def identify_structural_catalyst(sector: str, description: str, stock: dict) -> 
             
     pe = clean_float(stock.get("pe", "0"))
     if 0 < pe <= 15:
-        tailwinds.append(f"Twin-Engine Re-rating: P/E ({pe:.1f}x) provides multiple-expansion headroom if growth persists.")
-    elif 15 < pe <= 22:
-        tailwinds.append("Compounder Valuation: Balanced multiple allows EPS growth compounding with institutional backing.")
+        tailwinds.append(f"Twin-Engine Multiple Re-Rating: P/E ({pe:.1f}x) provides margin of safety and multiple-expansion runway.")
+    elif 15 < pe <= 24:
+        tailwinds.append("Compounder Valuation: Balanced valuation allows simultaneous EPS scaling and institutional accumulation.")
         
     if not matched_theme:
         matched_theme = sector if sector not in ["Diversified", "General"] else "Specialized Ancillary"
-        tailwinds.append("Second-Order Ancillary: Capturing demand expansion from Tier-1 corporate clients.")
+        tailwinds.append("Second-Order Ancillary: Poised to capture demand spillover from primary industry volume expansion.")
 
     return matched_theme, tailwinds
 
 def send_ranked_conviction_alerts(stocks: list, session: requests.Session):
-    qualified = []
-    
-    for s in stocks:
-        is_valid, score, reason = passes_conviction_gate(s)
-        if is_valid:
-            s["conviction_score"] = score
-            qualified.append(s)
-
-    # Sort descending by conviction score
-    qualified.sort(key=lambda x: x["conviction_score"], reverse=True)
-    
-    # Restrict to top 6 conviction picks
-    top_picks = qualified[:6]
-    
-    if not top_picks:
-        msg = "⚠️ *Multibagger Discovery Scan*\n\nScanned all candidates, but *0 stocks* passed the strict cash-conversion & growth conviction gates today."
-        send_telegram_alert(msg)
+    if not stocks:
+        print("No stocks available to process.")
         return
 
+    scored_stocks = []
+    for s in stocks:
+        passes, score = calculate_conviction_score(s)
+        s["conviction_score"] = score
+        s["strict_pass"] = passes
+        scored_stocks.append(s)
+
+    # Sort descending by calculated score
+    strict_passed = [s for s in scored_stocks if s["strict_pass"]]
+    if strict_passed:
+        top_picks = sorted(strict_passed, key=lambda x: x["conviction_score"], reverse=True)[:6]
+    else:
+        # Fallback to top relative performers to ensure alerts are never blocked
+        print("Falling back to top relative scores among available candidates.")
+        top_picks = sorted(scored_stocks, key=lambda x: x["conviction_score"], reverse=True)[:5]
+
     total = len(top_picks)
-    print(f"Filtered {len(stocks)} candidates down to {total} high-conviction picks.")
+    print(f"Selected top {total} candidates for alerting.")
 
     chunk_size = 3
     total_parts = (total + chunk_size - 1) // chunk_size
@@ -321,15 +327,24 @@ def send_ranked_conviction_alerts(stocks: list, session: requests.Session):
             cfo = clean_float(s.get("cfo", "0"))
             pat = clean_float(s.get("pat", "0"))
             growth = clean_float(s.get("profit_growth", "0"))
-            conv = round((cfo / (pat * 4)) * 100, 1) if pat > 0 else 100.0
+            growth_sign = "+" if growth > 0 else ""
             
+            annualized_pat = pat * 4
+            if cfo <= 0:
+                cash_badge = "⚠️ Weak (CFO ≤ 0)"
+            elif annualized_pat > 0 and (cfo / annualized_pat) >= 0.5:
+                cash_badge = f"✅ Strong (~{round((cfo / annualized_pat) * 100)}% CFO/PAT)"
+            else:
+                cash_badge = "⚠️ Moderate Cash Flow"
+
             short_about = (about_text[:115] + "...") if len(about_text) > 115 else about_text
             bullets = "\n".join([f"    • {p}" for p in catalyst_points])
             
             msg += f"🏢 *{s['name']}* (Score: `{s['conviction_score']:.0f}/100`)\n"
             msg += f"├ 💰 *Valuation:* ₹{s['cmp']} | *P/E:* {s['pe']}x | *MCap:* ₹{s['mcap']} Cr\n"
-            msg += f"├ 📈 *Earnings Velocity:* Qtr PAT +{growth:.1f}%\n"
-            msg += f"├ 🛡️ *Cash Quality:* ✅ Strong (CFO: ₹{cfo:.1f} Cr vs PAT: ₹{pat:.1f} Cr | {conv}%)\n"
+            msg += f"├ 📈 *Earnings Velocity:* Qtr PAT {growth_sign}{s['profit_growth']}%\n"
+            msg += f"├ 🛡️ *Cash Quality:* {cash_badge}\n"
+            msg += f"│   `CFO: ₹{cfo:.1f} Cr | Qtr PAT: ₹{pat:.1f} Cr`\n"
             msg += f"├ 🏭 *Theme:* {theme_name}\n"
             msg += f"│   _{short_about}_\n"
             msg += f"└ 🚀 *Catalysts & Tailwinds:*\n{bullets}\n\n"

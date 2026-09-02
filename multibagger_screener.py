@@ -2,6 +2,7 @@ import os
 import sys
 import time
 import requests
+from urllib.parse import urlparse, parse_qs, urlencode, urlunparse
 from bs4 import BeautifulSoup
 
 TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
@@ -12,11 +13,18 @@ HEADERS = {
     "User-Agent": (
         "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
         "AppleWebKit/537.36 (KHTML, like Gecko) "
-        "Chrome/124.0.0.0 Safari/537.36"
+        "Chrome/125.0.0.0 Safari/537.36"
     ),
-    "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+    "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8",
     "Accept-Language": "en-US,en;q=0.9",
     "Referer": "https://www.screener.in/",
+    "Sec-Ch-Ua": '"Google Chrome";v="125", "Chromium";v="125", "Not.A/Brand";v="24"',
+    "Sec-Ch-Ua-Mobile": "?0",
+    "Sec-Ch-Ua-Platform": '"Windows"',
+    "Sec-Fetch-Dest": "document",
+    "Sec-Fetch-Mode": "navigate",
+    "Sec-Fetch-Site": "same-origin",
+    "Sec-Fetch-User": "?1",
     "Upgrade-Insecure-Requests": "1"
 }
 
@@ -27,6 +35,13 @@ def clean_float(val: str) -> float:
         return float(val.replace(",", "").replace("%", "").strip())
     except (ValueError, AttributeError):
         return 0.0
+
+def build_page_url(base_url: str, page: int) -> str:
+    url_parts = list(urlparse(base_url.strip()))
+    query = parse_qs(url_parts[4])
+    query["page"] = [str(page)]
+    url_parts[4] = urlencode(query, doseq=True)
+    return urlunparse(url_parts)
 
 def send_telegram_alert(message: str) -> bool:
     token = (TELEGRAM_BOT_TOKEN or "").strip().replace('"', '').replace("'", "")
@@ -60,29 +75,47 @@ def fetch_screener_stocks(url: str) -> list[dict]:
     stocks = []
     
     while True:
-        page_url = f"{url}?page={page}" if "?" not in url else f"{url}&page={page}"
-        print(f"Fetching page {page}: {page_url}")
+        page_url = build_page_url(url, page)
+        print(f"--> Requesting: {page_url}")
+        
         try:
             resp = session.get(page_url, timeout=20, allow_redirects=True)
         except Exception as e:
             print(f"Network error on page {page}: {e}", file=sys.stderr)
             break
             
-        if resp.status_code != 200 or "/login/" in resp.url:
-            print(f"Stopping: Status {resp.status_code}, URL: {resp.url}", file=sys.stderr)
+        print(f"--> Status: {resp.status_code} | Final URL: {resp.url}")
+        
+        if "/login/" in resp.url:
+            print("ERROR: Screener redirected to /login/. The screen is private!", file=sys.stderr)
+            break
+            
+        if resp.status_code != 200:
+            print(f"ERROR: HTTP {resp.status_code} returned by Screener", file=sys.stderr)
             break
             
         soup = BeautifulSoup(resp.text, "html.parser")
+        
+        # Check title in case Screener served an error or captcha page
+        page_title = soup.title.get_text(strip=True) if soup.title else "No Title"
+        print(f"--> Page Title: {page_title}")
+        
         table = soup.find("table", class_="data-table")
         if not table:
-            print("No data-table found on page.", file=sys.stderr)
-            break
-            
+            # Fallback to any table with tr elements
+            tables = soup.find_all("table")
+            if tables:
+                table = tables[0]
+            else:
+                print("ERROR: No data table found on page.", file=sys.stderr)
+                break
+                
+        # Parse headers dynamically
+        headers = []
         thead = table.find("thead")
-        if not thead:
-            break
-            
-        headers = [th.get_text(strip=True).lower() for th in thead.find_all("th")]
+        if thead:
+            headers = [th.get_text(strip=True).lower() for th in thead.find_all("th")]
+        print(f"--> Found headers: {headers}")
 
         def locate(candidates):
             for cand in candidates:
@@ -94,19 +127,20 @@ def fetch_screener_stocks(url: str) -> list[dict]:
         idx_name = locate(["name"])
         idx_cmp = locate(["cmp", "current price", "price"])
         idx_pe = locate(["p/e", "price to earning"])
-        idx_mcap = locate(["mar cap", "market capitalization", "market cap"])
+        idx_mcap = locate(["mar cap", "market cap"])
         idx_growth = locate(["yoy quarterly profit", "qtr profit var", "profit growth"])
         idx_cfo = locate(["cash from operations last year", "cfo last year", "cfo"])
-        idx_pat = locate(["profit after tax latest quarter", "net profit latest quarter", "profit after tax", "net profit", "pat"])
+        idx_pat = locate(["profit after tax latest quarter", "net profit latest quarter", "profit after tax", "pat"])
 
-        tbody = table.find("tbody")
-        if not tbody:
-            break
-            
+        tbody = table.find("tbody") or table
         rows = tbody.find_all("tr")
-        print(f"Page {page}: Found {len(rows)} rows.")
+        data_rows = [r for r in rows if r.find_all("td")]
+        print(f"--> Found {len(data_rows)} data rows on page {page}")
 
-        for row in rows:
+        if not data_rows:
+            break
+
+        for row in data_rows:
             tds = [td.get_text(strip=True) for td in row.find_all("td")]
             if len(tds) < 3:
                 continue
@@ -128,6 +162,10 @@ def fetch_screener_stocks(url: str) -> list[dict]:
                 "pat": get_val(idx_pat, 7, "0")
             })
         
+        # Stop pagination if fewer than 25 items or no 'Next' link
+        if len(data_rows) < 25:
+            break
+            
         next_button = soup.find("a", string=lambda t: t and "Next" in t)
         if not next_button:
             break

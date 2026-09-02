@@ -25,38 +25,38 @@ HEADERS = {
 
 CATALYST_TAXONOMY = {
     "Capital Goods & Defense": {
-        "keywords": ["defense", "aerospace", "valve", "pump", "casting", "forging", "machining", "cnc", "industrial machinery", "tool"],
+        "keywords": ["defense", "aerospace", "valve", "pump", "casting", "forging", "machining", "cnc", "industrial machinery", "tool", "taps"],
         "tailwinds": [
-            "Localization & Indigenization: Direct beneficiary of defense indigenization and Make in India.",
-            "Capex Cycle: Operating leverage accelerating as domestic factory utilization approaches peak levels."
+            "Import Substitution: Beneficiary of Make in India and defense indigenization.",
+            "Operating Leverage: Margin expansion as manufacturing capacity utilization peaks."
         ]
     },
-    "Power, Solar & Green Transition": {
+    "Power & Renewable Transition": {
         "keywords": ["power", "solar", "transformer", "cable", "wire", "switchgear", "grid", "renewable", "substation"],
         "tailwinds": [
-            "Grid Modernization: Transmission & distribution Capex expanding to support renewable capacity.",
-            "High Order Book: Multi-year revenue visibility backed by utility and private power tenders."
+            "Grid Modernization: Transmission capex expanding to evacuate renewable power.",
+            "Order Book Visibility: Multi-year backlog backed by utility tenders."
         ]
     },
     "Chemicals & Specialized Materials": {
-        "keywords": ["chemical", "specialty chemical", "intermediate", "agrochem", "api", "pharma", "polymer"],
+        "keywords": ["chemical", "specialty chemical", "intermediate", "agrochem", "api", "pharma", "polymer", "gelatine", "ossein"],
         "tailwinds": [
-            "China+1 Sourcing: Global supply chains diversifying strategic chemical intermediate sourcing.",
-            "Margin Expansion: Raw material input normalization driving earnings recovery."
+            "China+1 Shift: Global supply chains diversifying raw material intermediate sourcing.",
+            "Spread Recovery: Raw material input normalization driving EBITDA rebound."
         ]
     },
-    "Infrastructure & Specialized Civil": {
-        "keywords": ["rail", "wagon", "tunnel", "bridge", "highway", "port", "logistics", "civil construction", "infrastructure"],
+    "Infrastructure & Specialized Construction": {
+        "keywords": ["rail", "wagon", "tunnel", "bridge", "highway", "port", "logistics", "civil construction", "infrastructure", "construct"],
         "tailwinds": [
-            "National Infra Pipeline: Large public allocation toward strategic transit and dedicated corridors.",
-            "Niche Moat: Difficult-terrain civil engineering commands higher margin vs generic road builders."
+            "Strategic Infra Outlays: Beneficiary of national transit corridors and highway capex.",
+            "Execution Moat: Specialized civil works command protected margins vs plain road builders."
         ]
     },
     "Auto Ancillaries & Precision Parts": {
-        "keywords": ["auto ancillary", "bearing", "gear", "piston", "ev", "electric vehicle", "transmission", "sheet metal"],
+        "keywords": ["auto ancillary", "bearing", "gear", "piston", "ev", "electric vehicle", "transmission", "sheet metal", "castings"],
         "tailwinds": [
-            "Second-Order Engine: OEM production surge drives ancillary kit-value growth.",
-            "Premiumization: Shift to high-precision engineering parts expanding gross margins."
+            "Second-Order Engine: OEM production surge directly drives supplier order volumes.",
+            "Content Enhancement: Transition to precision-engineered components lifts unit margins."
         ]
     }
 }
@@ -103,13 +103,13 @@ def send_telegram_alert(message: str) -> bool:
 
 def get_company_profile(session: requests.Session, company_path: str) -> tuple[str, str]:
     if not company_path:
-        return "Industrial Ancillary", "Supplier to core industrial sectors."
+        return "Industrial Ancillary", "Niche supplier serving core industry verticals."
         
     full_url = BASE_URL + company_path if company_path.startswith("/") else f"{BASE_URL}/{company_path}"
     try:
         resp = session.get(full_url, timeout=10)
         if resp.status_code != 200:
-            return "Industrial Ancillary", "Supplier to core industrial sectors."
+            return "Industrial Ancillary", "Niche supplier serving core industry verticals."
             
         soup = BeautifulSoup(resp.text, "html.parser")
         
@@ -121,7 +121,7 @@ def get_company_profile(session: requests.Session, company_path: str) -> tuple[s
                 sector = sector_tag.get_text(strip=True)
 
         about_div = soup.find("div", class_="about") or soup.find("div", class_="company-profile")
-        description = "Supplier to core industrial sectors."
+        description = "Niche supplier serving core industry verticals."
         if about_div:
             p_tag = about_div.find("p")
             if p_tag:
@@ -129,7 +129,7 @@ def get_company_profile(session: requests.Session, company_path: str) -> tuple[s
                 
         return sector, description
     except Exception:
-        return "Industrial Ancillary", "Supplier to core industrial sectors."
+        return "Industrial Ancillary", "Niche supplier serving core industry verticals."
 
 def fetch_screener_stocks(url: str) -> tuple[list[dict], requests.Session]:
     session = requests.Session()
@@ -158,22 +158,33 @@ def fetch_screener_stocks(url: str) -> tuple[list[dict], requests.Session]:
                 break
                 
         thead = table.find("thead")
-        headers = [th.get_text(strip=True).lower() for th in thead.find_all("th")] if thead else []
+        raw_headers = [th.get_text(strip=True) for th in thead.find_all("th")] if thead else []
+        headers = [h.lower() for h in raw_headers]
 
-        def locate(candidates):
-            for cand in candidates:
+        # Explicit header matching to stop dividend yield and variation column collisions
+        def locate_exact(patterns):
+            for p in patterns:
                 for idx, h in enumerate(headers):
-                    if cand in h:
+                    if p == h or p in h:
+                        # Exclude dividend yield when searching for growth
+                        if "div" in h or "yield" in h:
+                            continue
                         return idx
             return -1
 
-        idx_name = locate(["name"])
-        idx_cmp = locate(["cmp", "current price", "price"])
-        idx_pe = locate(["p/e", "price to earning"])
-        idx_mcap = locate(["mar cap", "market capitalization", "market cap"])
-        idx_growth = locate(["yoy quarterly profit", "qtr profit var", "profit growth"])
-        idx_cfo = locate(["cash from operations last year", "cfo last year", "cfo"])
-        idx_pat = locate(["profit after tax latest quarter", "net profit latest quarter", "profit after tax", "pat"])
+        idx_name = locate_exact(["name"])
+        idx_cmp = locate_exact(["cmp rs", "cmp", "current price", "price"])
+        idx_pe = locate_exact(["p/e", "price to earning"])
+        idx_mcap = locate_exact(["mar cap", "market capitalization", "market cap"])
+        
+        # Matches 'Qtr Profit Var %' or 'YOY Quarterly profit growth'
+        idx_growth = locate_exact(["qtr profit var", "profit var %", "yoy quarterly profit"])
+        
+        # Matches 'Cash from operations last year' or 'CFO'
+        idx_cfo = locate_exact(["cash from operations last year", "cfo last year", "cfo"])
+        
+        # Matches 'NP Qtr Rs.Cr.' or 'Profit after tax latest quarter'
+        idx_pat = locate_exact(["np qtr", "net profit latest quarter", "profit after tax latest quarter", "pat latest quarter"])
 
         tbody = table.find("tbody") or table
         rows = tbody.find_all("tr")
@@ -223,31 +234,31 @@ def calculate_conviction_score(stock: dict) -> tuple[bool, float]:
     mcap = clean_float(stock.get("mcap", "0"))
     pe = clean_float(stock.get("pe", "0"))
 
-    # Base sanity guardrails
-    if mcap < 10.0 or (pe > 40.0 and pe > 0):
+    # Hard filters: Eliminate micro penny-stocks (<₹20 Cr) and non-standard valuations
+    if mcap < 20.0 or pe <= 0 or pe > 35.0:
         return False, 0.0
 
     score = 0.0
 
-    # 1. Growth Velocity (Max 40 points)
-    if growth >= 30.0:
+    # 1. Earnings Acceleration Factor (Max 40 pts)
+    if growth >= 50.0:
         score += 40.0
+    elif growth >= 25.0:
+        score += 30.0
     elif growth >= 15.0:
-        score += 25.0
-    elif growth > 0.0:
         score += 15.0
     else:
         score += 5.0
 
-    # 2. Valuation Expansion Runway (Max 30 points)
-    if 5.0 <= pe <= 16.0:
+    # 2. Valuation Expansion Runway (Max 30 pts)
+    if 5.0 <= pe <= 15.0:
         score += 30.0
-    elif 16.0 < pe <= 26.0:
+    elif 15.0 < pe <= 24.0:
         score += 20.0
     else:
         score += 10.0
 
-    # 3. Cash Reality Check (Max 30 points)
+    # 3. Cash Flow Verification (Max 30 pts)
     annualized_pat = pat * 4 if pat > 0 else 1.0
     if cfo > 0:
         conversion = (cfo / annualized_pat) if annualized_pat > 0 else 0
@@ -258,10 +269,10 @@ def calculate_conviction_score(stock: dict) -> tuple[bool, float]:
         else:
             score += 10.0
     else:
-        score -= 5.0
+        score -= 10.0
 
-    passes_strict = (score >= 45.0) and (cfo > 0)
-    return passes_strict, score
+    passes = (score >= 45.0) and (cfo > 0)
+    return passes, score
 
 def identify_structural_catalyst(sector: str, description: str, stock: dict) -> tuple[str, list[str]]:
     text = (sector + " " + description).lower()
@@ -276,19 +287,19 @@ def identify_structural_catalyst(sector: str, description: str, stock: dict) -> 
             
     pe = clean_float(stock.get("pe", "0"))
     if 0 < pe <= 15:
-        tailwinds.append(f"Twin-Engine Multiple Re-Rating: P/E ({pe:.1f}x) provides margin of safety and multiple-expansion runway.")
+        tailwinds.append(f"Twin-Engine Re-Rating: Low multiple ({pe:.1f}x) leaves room for valuation re-rating if growth holds.")
     elif 15 < pe <= 24:
-        tailwinds.append("Compounder Valuation: Balanced valuation allows simultaneous EPS scaling and institutional accumulation.")
+        tailwinds.append("Compounder Valuation: Balanced multiple enables organic EPS growth with institutional accumulation.")
         
     if not matched_theme:
-        matched_theme = sector if sector not in ["Diversified", "General"] else "Specialized Ancillary"
-        tailwinds.append("Second-Order Ancillary: Poised to capture demand spillover from primary industry volume expansion.")
+        matched_theme = sector if sector not in ["Diversified", "General", "Commodities"] else "Niche Engineering Ancillary"
+        tailwinds.append("Second-Order Beneficiary: Positioned to capture ancillary demand from Tier-1 corporate growth.")
 
     return matched_theme, tailwinds
 
 def send_ranked_conviction_alerts(stocks: list, session: requests.Session):
     if not stocks:
-        print("No stocks available to process.")
+        print("No stocks scraped from Screener.")
         return
 
     scored_stocks = []
@@ -298,18 +309,14 @@ def send_ranked_conviction_alerts(stocks: list, session: requests.Session):
         s["strict_pass"] = passes
         scored_stocks.append(s)
 
-    # Sort descending by calculated score
+    # Prioritize candidates that pass strict gates
     strict_passed = [s for s in scored_stocks if s["strict_pass"]]
     if strict_passed:
-        top_picks = sorted(strict_passed, key=lambda x: x["conviction_score"], reverse=True)[:6]
+        top_picks = sorted(strict_passed, key=lambda x: x["conviction_score"], reverse=True)[:5]
     else:
-        # Fallback to top relative performers to ensure alerts are never blocked
-        print("Falling back to top relative scores among available candidates.")
         top_picks = sorted(scored_stocks, key=lambda x: x["conviction_score"], reverse=True)[:5]
 
     total = len(top_picks)
-    print(f"Selected top {total} candidates for alerting.")
-
     chunk_size = 3
     total_parts = (total + chunk_size - 1) // chunk_size
 
@@ -331,9 +338,10 @@ def send_ranked_conviction_alerts(stocks: list, session: requests.Session):
             
             annualized_pat = pat * 4
             if cfo <= 0:
-                cash_badge = "⚠️ Weak (CFO ≤ 0)"
+                cash_badge = "⚠️ Negative Cash Flow (CFO ≤ 0)"
             elif annualized_pat > 0 and (cfo / annualized_pat) >= 0.5:
-                cash_badge = f"✅ Strong (~{round((cfo / annualized_pat) * 100)}% CFO/PAT)"
+                conv_pct = round((cfo / annualized_pat) * 100)
+                cash_badge = f"✅ Strong Conversion (~{conv_pct}% CFO/PAT)"
             else:
                 cash_badge = "⚠️ Moderate Cash Flow"
 
@@ -342,7 +350,7 @@ def send_ranked_conviction_alerts(stocks: list, session: requests.Session):
             
             msg += f"🏢 *{s['name']}* (Score: `{s['conviction_score']:.0f}/100`)\n"
             msg += f"├ 💰 *Valuation:* ₹{s['cmp']} | *P/E:* {s['pe']}x | *MCap:* ₹{s['mcap']} Cr\n"
-            msg += f"├ 📈 *Earnings Velocity:* Qtr PAT {growth_sign}{s['profit_growth']}%\n"
+            msg += f"├ 📈 *Earnings Velocity:* Qtr PAT Var: {growth_sign}{s['profit_growth']}%\n"
             msg += f"├ 🛡️ *Cash Quality:* {cash_badge}\n"
             msg += f"│   `CFO: ₹{cfo:.1f} Cr | Qtr PAT: ₹{pat:.1f} Cr`\n"
             msg += f"├ 🏭 *Theme:* {theme_name}\n"

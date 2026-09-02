@@ -1,0 +1,34 @@
+name: Daily Multibagger Screener
+
+on:
+  schedule:
+    # 03:00 UTC corresponds to 08:30 AM IST (Monday to Friday)
+    - cron: '0 3 * * 1-5'
+  workflow_dispatch: # Allows manual trigger from the GitHub Actions dashboard
+
+jobs:
+  run-screener:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+
+      - name: Install Dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Execute Screener and Send Telegram Alerts
+        env:
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+          SCREENER_URL: ${{ secrets.SCREENER_URL }}
+        run: |
+          python multibagger_screener.py

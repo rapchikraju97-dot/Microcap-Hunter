@@ -8,20 +8,15 @@ TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
 TELEGRAM_CHAT_ID = os.getenv("TELEGRAM_CHAT_ID")
 SCREENER_URL = os.getenv("SCREENER_URL")
 
-# Comprehensive headers to mimic an authentic browser session
 HEADERS = {
     "User-Agent": (
         "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
         "AppleWebKit/537.36 (KHTML, like Gecko) "
         "Chrome/124.0.0.0 Safari/537.36"
     ),
-    "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8",
+    "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
     "Accept-Language": "en-US,en;q=0.9",
     "Referer": "https://www.screener.in/",
-    "Sec-Fetch-Dest": "document",
-    "Sec-Fetch-Mode": "navigate",
-    "Sec-Fetch-Site": "same-origin",
-    "Sec-Fetch-User": "?1",
     "Upgrade-Insecure-Requests": "1"
 }
 
@@ -34,17 +29,24 @@ def clean_float(val: str) -> float:
         return 0.0
 
 def send_telegram_alert(message: str) -> bool:
-    url = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage"
+    token = (TELEGRAM_BOT_TOKEN or "").strip().replace('"', '').replace("'", "")
+    if token.lower().startswith("bot"):
+        token = token[3:]
+    
+    chat_id = str(TELEGRAM_CHAT_ID or "").strip().replace('"', '').replace("'", "")
+    url = f"https://api.telegram.org/bot{token}/sendMessage"
+    
     payload = {
-        "chat_id": TELEGRAM_CHAT_ID,
+        "chat_id": chat_id,
         "text": message,
         "parse_mode": "Markdown",
         "disable_web_page_preview": True
     }
+    
     try:
         resp = requests.post(url, json=payload, timeout=15)
         if resp.status_code != 200:
-            print(f"Telegram API error {resp.status_code}: {resp.text}", file=sys.stderr)
+            print(f"Telegram API Error {resp.status_code}: {resp.text}", file=sys.stderr)
             return False
         return True
     except Exception as e:
@@ -59,59 +61,60 @@ def fetch_screener_stocks(url: str) -> list[dict]:
     
     while True:
         page_url = f"{url}?page={page}" if "?" not in url else f"{url}&page={page}"
-        print(f"Fetching: {page_url}")
-        
         try:
             resp = session.get(page_url, timeout=20, allow_redirects=True)
         except Exception as e:
             print(f"Network error on page {page}: {e}", file=sys.stderr)
             break
             
-        print(f"Status Code: {resp.status_code} | Final URL: {resp.url}")
-        
-        # Check if redirected to login
-        if "/login/" in resp.url:
-            print(
-                "\n❌ ERROR: Screener.in redirected to the login page!\n"
-                "Your screen is private. Please make the screen public or run it locally.",
-                file=sys.stderr
-            )
-            break
-            
-        if resp.status_code != 200:
-            print(f"Request failed with HTTP {resp.status_code}", file=sys.stderr)
+        if resp.status_code != 200 or "/login/" in resp.url:
             break
             
         soup = BeautifulSoup(resp.text, "html.parser")
         table = soup.find("table", class_="data-table")
-        
         if not table:
-            print("No table with class 'data-table' found in the response.")
             break
             
+        thead = table.find("thead")
+        if not thead:
+            break
+            
+        headers = [th.get_text(strip=True).lower() for th in thead.find_all("th")]
+
+        def locate(candidates):
+            for cand in candidates:
+                for idx, h in enumerate(headers):
+                    if cand in h:
+                        return idx
+            return -1
+
+        idx_name = locate(["name"])
+        idx_cmp = locate(["cmp", "current price", "price"])
+        idx_pe = locate(["p/e", "price to earning"])
+        idx_mcap = locate(["mar cap", "market capitalization", "market cap"])
+        idx_growth = locate(["yoy quarterly profit growth", "qtr profit var", "profit growth"])
+        idx_cfo = locate(["cash from operations last year", "cfo last year", "cfo"])
+        idx_pat = locate(["profit after tax latest quarter", "net profit latest quarter", "profit after tax", "net profit", "pat"])
+
         tbody = table.find("tbody")
         if not tbody:
             break
             
-        rows = tbody.find_all("tr")
-        if not rows:
-            break
-            
-        for row in rows:
-            cols = [td.get_text(strip=True) for td in row.find_all("td")]
-            if len(cols) >= 6:
-                # Extracts values based on visible columns
-                stocks.append({
-                    "name": cols[1],
-                    "cmp": cols[2],
-                    "pe": cols[3],
-                    "mcap": cols[4],
-                    "profit_growth": cols[5],
-                    "cfo": cols[6] if len(cols) > 6 else "0",
-                    "pat": cols[7] if len(cols) > 7 else "0"
-                })
+        for row in tbody.find_all("tr"):
+            tds = [td.get_text(strip=True) for td in row.find_all("td")]
+            if len(tds) < len(headers):
+                continue
+                
+            stocks.append({
+                "name": tds[idx_name] if idx_name != -1 else tds[1],
+                "cmp": tds[idx_cmp] if idx_cmp != -1 else "N/A",
+                "pe": tds[idx_pe] if idx_pe != -1 else "N/A",
+                "mcap": tds[idx_mcap] if idx_mcap != -1 else "N/A",
+                "profit_growth": tds[idx_growth] if idx_growth != -1 else "0.00",
+                "cfo": tds[idx_cfo] if idx_cfo != -1 else "0",
+                "pat": tds[idx_pat] if idx_pat != -1 else "0"
+            })
         
-        # Check for pagination
         next_button = soup.find("a", string=lambda t: t and "Next" in t)
         if not next_button:
             break
@@ -121,16 +124,24 @@ def fetch_screener_stocks(url: str) -> list[dict]:
         
     return stocks
 
-def evaluate_cash_flow_health(stock: dict) -> tuple[str, str]:
+def evaluate_cash_flow_health(stock: dict) -> tuple[str, str, str]:
     cfo = clean_float(stock.get("cfo", "0"))
     pat = clean_float(stock.get("pat", "0"))
     
+    details = f"CFO: ₹{cfo:.1f} Cr | Qtr PAT: ₹{pat:.1f} Cr"
+
     if cfo <= 0:
-        return "⚠️", "Negative Cash Flow (CFO ≤ 0)"
-    if pat > 0 and (cfo / pat) < 0.6:
-        conversion = round((cfo / pat) * 100, 1)
-        return "⚠️", f"Weak Conversion ({conversion}% PAT to CFO)"
-    return "✅", "Strong Cash Conversion"
+        return "⚠️", "Negative Cash Flow", f"{details} (CFO ≤ 0)"
+    
+    # Quarterly PAT ko annualize (~4x) karke annual CFO se compare karte hain
+    annualized_pat = pat * 4
+    if annualized_pat > 0:
+        conversion = round((cfo / annualized_pat) * 100, 1)
+        if conversion < 50.0:
+            return "⚠️", "Low Cash Conversion", f"{details} (~{conversion}% conversion)"
+        return "✅", "Strong Cash Conversion", f"{details} (~{conversion}% conversion)"
+    
+    return "✅", "Cash Positive", details
 
 def send_chunked_alerts(stocks: list, chunk_size: int = 5):
     if not stocks:
@@ -144,19 +155,22 @@ def send_chunked_alerts(stocks: list, chunk_size: int = 5):
         batch = stocks[idx:idx + chunk_size]
         part_num = (idx // chunk_size) + 1
         
-        msg = f"📡 *Multibagger Discovery Alert* (Part {part_num}/{total_parts})\n"
+        msg = f"📡 *Multibagger Discovery Scan* ({part_num}/{total_parts})\n"
         msg += "━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
         
         for s in batch:
-            icon, status = evaluate_cash_flow_health(s)
-            msg += f"🏢 *{s['name']}*\n"
-            msg += f"• *Price:* ₹{s['cmp']} | *P/E:* {s['pe']}x\n"
-            msg += f"• *MCap:* ₹{s['mcap']} Cr | *PAT Growth:* {s['profit_growth']}%\n"
-            msg += f"• *Cash Health:* {icon} {status}\n\n"
+            icon, status, cash_detail = evaluate_cash_flow_health(s)
             
-        success = send_telegram_alert(msg)
-        if success:
-            print(f"Sent batch {part_num}/{total_parts} to Telegram.")
+            growth_val = clean_float(s['profit_growth'])
+            growth_sign = "+" if growth_val > 0 else ""
+            
+            msg += f"🏢 *{s['name']}*\n"
+            msg += f"├ 💰 *Valuation:* ₹{s['cmp']} | *P/E:* {s['pe']}x | *MCap:* ₹{s['mcap']} Cr\n"
+            msg += f"├ 📈 *Earnings:* Qtr PAT Var: {growth_sign}{s['profit_growth']}%\n"
+            msg += f"└ 🛡️ *Cash Health:* {icon} *{status}*\n"
+            msg += f"    `{cash_detail}`\n\n"
+            
+        send_telegram_alert(msg)
         time.sleep(1.5)
 
 def main():

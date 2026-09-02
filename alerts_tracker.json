@@ -1,0 +1,44 @@
+{
+  "tracked_stocks": {
+    "Swati Projects": {
+      "first_alerted_date": "2026-09-02",
+      "first_alerted_price": 43.89,
+      "latest_price": 43.89,
+      "href": "/company/543914/consolidated/",
+      "score": 100,
+      "theme": "Financial Services"
+    },
+    "Fonebox Retail": {
+      "first_alerted_date": "2026-09-02",
+      "first_alerted_price": 99.0,
+      "latest_price": 99.0,
+      "href": "/company/FONEBOX/",
+      "score": 100,
+      "theme": "Consumer Retail & Distribution"
+    },
+    "Crestchem": {
+      "first_alerted_date": "2026-09-02",
+      "first_alerted_price": 132.05,
+      "latest_price": 132.05,
+      "href": "/company/526269/",
+      "score": 100,
+      "theme": "Chemicals & Specialized Materials"
+    },
+    "String Metaverse": {
+      "first_alerted_date": "2026-09-02",
+      "first_alerted_price": 8.9,
+      "latest_price": 8.9,
+      "href": "/company/534535/consolidated/",
+      "score": 100,
+      "theme": "Gaming, IT & Digital Platforms"
+    },
+    "Adisoft Technol.": {
+      "first_alerted_date": "2026-09-02",
+      "first_alerted_price": 200.0,
+      "latest_price": 200.0,
+      "href": "/company/ADISOFT/consolidated/",
+      "score": 95.0,
+      "theme": "Gaming, IT & Digital Platforms"
+    }
+  }
+}

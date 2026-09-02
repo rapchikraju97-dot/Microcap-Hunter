@@ -159,32 +159,33 @@ def fetch_screener_stocks(url: str) -> tuple[list[dict], requests.Session]:
                 
         thead = table.find("thead")
         raw_headers = [th.get_text(strip=True) for th in thead.find_all("th")] if thead else []
-        headers = [h.lower() for h in raw_headers]
+        headers = [h.lower().replace(".", "").replace("%", "").strip() for h in raw_headers]
 
-        # Explicit header matching to stop dividend yield and variation column collisions
-        def locate_exact(patterns):
+        # Explicit regex-style substring matching for Screener's exact table headers
+        def locate_col(patterns, reject_patterns=None):
+            if reject_patterns is None:
+                reject_patterns = []
             for p in patterns:
                 for idx, h in enumerate(headers):
-                    if p == h or p in h:
-                        # Exclude dividend yield when searching for growth
-                        if "div" in h or "yield" in h:
-                            continue
+                    if any(rej in h for rej in reject_patterns):
+                        continue
+                    if p in h:
                         return idx
             return -1
 
-        idx_name = locate_exact(["name"])
-        idx_cmp = locate_exact(["cmp rs", "cmp", "current price", "price"])
-        idx_pe = locate_exact(["p/e", "price to earning"])
-        idx_mcap = locate_exact(["mar cap", "market capitalization", "market cap"])
+        idx_name = locate_col(["name"])
+        idx_cmp = locate_col(["cmp", "price", "current price"])
+        idx_pe = locate_col(["p/e", "price to earning"])
+        idx_mcap = locate_col(["mar cap", "market cap"])
         
-        # Matches 'Qtr Profit Var %' or 'YOY Quarterly profit growth'
-        idx_growth = locate_exact(["qtr profit var", "profit var %", "yoy quarterly profit"])
+        # Growth MUST have 'var' or 'growth', and MUST NOT be dividend yield
+        idx_growth = locate_col(["profit var", "qtr profit var", "profit growth"], reject_patterns=["div", "yield"])
         
-        # Matches 'Cash from operations last year' or 'CFO'
-        idx_cfo = locate_exact(["cash from operations last year", "cfo last year", "cfo"])
+        # Cash flow MUST have 'cfo' or 'cash from operations'
+        idx_cfo = locate_col(["cfo", "cash from operations"])
         
-        # Matches 'NP Qtr Rs.Cr.' or 'Profit after tax latest quarter'
-        idx_pat = locate_exact(["np qtr", "net profit latest quarter", "profit after tax latest quarter", "pat latest quarter"])
+        # PAT MUST NOT match 'var', 'growth', or 'sales'
+        idx_pat = locate_col(["np qtr", "profit after tax", "net profit"], reject_patterns=["var", "growth", "sales", "div"])
 
         tbody = table.find("tbody") or table
         rows = tbody.find_all("tr")
@@ -234,31 +235,31 @@ def calculate_conviction_score(stock: dict) -> tuple[bool, float]:
     mcap = clean_float(stock.get("mcap", "0"))
     pe = clean_float(stock.get("pe", "0"))
 
-    # Hard filters: Eliminate micro penny-stocks (<₹20 Cr) and non-standard valuations
-    if mcap < 20.0 or pe <= 0 or pe > 35.0:
+    # Hard guardrails: Filter out micro shell companies (<₹25 Cr) and extreme P/E
+    if mcap < 25.0 or pe <= 0 or pe > 35.0:
         return False, 0.0
 
     score = 0.0
 
-    # 1. Earnings Acceleration Factor (Max 40 pts)
+    # 1. Earnings Growth (Max 40 points)
     if growth >= 50.0:
         score += 40.0
     elif growth >= 25.0:
         score += 30.0
-    elif growth >= 15.0:
+    elif growth >= 10.0:
         score += 15.0
     else:
         score += 5.0
 
-    # 2. Valuation Expansion Runway (Max 30 pts)
-    if 5.0 <= pe <= 15.0:
+    # 2. Valuation Expansion Runway (Max 30 points)
+    if 5.0 <= pe <= 16.0:
         score += 30.0
-    elif 15.0 < pe <= 24.0:
+    elif 16.0 < pe <= 24.0:
         score += 20.0
     else:
         score += 10.0
 
-    # 3. Cash Flow Verification (Max 30 pts)
+    # 3. Cash Flow Conversion (Max 30 points)
     annualized_pat = pat * 4 if pat > 0 else 1.0
     if cfo > 0:
         conversion = (cfo / annualized_pat) if annualized_pat > 0 else 0
@@ -287,9 +288,9 @@ def identify_structural_catalyst(sector: str, description: str, stock: dict) -> 
             
     pe = clean_float(stock.get("pe", "0"))
     if 0 < pe <= 15:
-        tailwinds.append(f"Twin-Engine Re-Rating: Low multiple ({pe:.1f}x) leaves room for valuation re-rating if growth holds.")
+        tailwinds.append(f"Twin-Engine Re-Rating: Low multiple ({pe:.1f}x) provides multiple expansion runway if growth holds.")
     elif 15 < pe <= 24:
-        tailwinds.append("Compounder Valuation: Balanced multiple enables organic EPS growth with institutional accumulation.")
+        tailwinds.append("Compounder Valuation: Balanced multiple enables EPS growth with institutional accumulation.")
         
     if not matched_theme:
         matched_theme = sector if sector not in ["Diversified", "General", "Commodities"] else "Niche Engineering Ancillary"
@@ -309,11 +310,11 @@ def send_ranked_conviction_alerts(stocks: list, session: requests.Session):
         s["strict_pass"] = passes
         scored_stocks.append(s)
 
-    # Prioritize candidates that pass strict gates
     strict_passed = [s for s in scored_stocks if s["strict_pass"]]
     if strict_passed:
         top_picks = sorted(strict_passed, key=lambda x: x["conviction_score"], reverse=True)[:5]
     else:
+        print("Falling back to top relative scores among available candidates.")
         top_picks = sorted(scored_stocks, key=lambda x: x["conviction_score"], reverse=True)[:5]
 
     total = len(top_picks)

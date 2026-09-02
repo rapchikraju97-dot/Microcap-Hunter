@@ -61,6 +61,7 @@ def fetch_screener_stocks(url: str) -> list[dict]:
     
     while True:
         page_url = f"{url}?page={page}" if "?" not in url else f"{url}&page={page}"
+        print(f"Fetching page {page}: {page_url}")
         try:
             resp = session.get(page_url, timeout=20, allow_redirects=True)
         except Exception as e:
@@ -68,11 +69,13 @@ def fetch_screener_stocks(url: str) -> list[dict]:
             break
             
         if resp.status_code != 200 or "/login/" in resp.url:
+            print(f"Stopping: Status {resp.status_code}, URL: {resp.url}", file=sys.stderr)
             break
             
         soup = BeautifulSoup(resp.text, "html.parser")
         table = soup.find("table", class_="data-table")
         if not table:
+            print("No data-table found on page.", file=sys.stderr)
             break
             
         thead = table.find("thead")
@@ -92,7 +95,7 @@ def fetch_screener_stocks(url: str) -> list[dict]:
         idx_cmp = locate(["cmp", "current price", "price"])
         idx_pe = locate(["p/e", "price to earning"])
         idx_mcap = locate(["mar cap", "market capitalization", "market cap"])
-        idx_growth = locate(["yoy quarterly profit growth", "qtr profit var", "profit growth"])
+        idx_growth = locate(["yoy quarterly profit", "qtr profit var", "profit growth"])
         idx_cfo = locate(["cash from operations last year", "cfo last year", "cfo"])
         idx_pat = locate(["profit after tax latest quarter", "net profit latest quarter", "profit after tax", "net profit", "pat"])
 
@@ -100,19 +103,29 @@ def fetch_screener_stocks(url: str) -> list[dict]:
         if not tbody:
             break
             
-        for row in tbody.find_all("tr"):
+        rows = tbody.find_all("tr")
+        print(f"Page {page}: Found {len(rows)} rows.")
+
+        for row in rows:
             tds = [td.get_text(strip=True) for td in row.find_all("td")]
-            if len(tds) < len(headers):
+            if len(tds) < 3:
                 continue
                 
+            def get_val(col_idx, fallback_idx, default="N/A"):
+                if col_idx != -1 and col_idx < len(tds):
+                    return tds[col_idx]
+                if fallback_idx < len(tds):
+                    return tds[fallback_idx]
+                return default
+
             stocks.append({
-                "name": tds[idx_name] if idx_name != -1 else tds[1],
-                "cmp": tds[idx_cmp] if idx_cmp != -1 else "N/A",
-                "pe": tds[idx_pe] if idx_pe != -1 else "N/A",
-                "mcap": tds[idx_mcap] if idx_mcap != -1 else "N/A",
-                "profit_growth": tds[idx_growth] if idx_growth != -1 else "0.00",
-                "cfo": tds[idx_cfo] if idx_cfo != -1 else "0",
-                "pat": tds[idx_pat] if idx_pat != -1 else "0"
+                "name": get_val(idx_name, 1, "Unknown"),
+                "cmp": get_val(idx_cmp, 2, "N/A"),
+                "pe": get_val(idx_pe, 3, "N/A"),
+                "mcap": get_val(idx_mcap, 4, "N/A"),
+                "profit_growth": get_val(idx_growth, 5, "0.00"),
+                "cfo": get_val(idx_cfo, 6, "0"),
+                "pat": get_val(idx_pat, 7, "0")
             })
         
         next_button = soup.find("a", string=lambda t: t and "Next" in t)
@@ -133,7 +146,6 @@ def evaluate_cash_flow_health(stock: dict) -> tuple[str, str, str]:
     if cfo <= 0:
         return "⚠️", "Negative Cash Flow", f"{details} (CFO ≤ 0)"
     
-    # Quarterly PAT ko annualize (~4x) karke annual CFO se compare karte hain
     annualized_pat = pat * 4
     if annualized_pat > 0:
         conversion = round((cfo / annualized_pat) * 100, 1)

@@ -24,6 +24,13 @@ HEADERS = {
 }
 
 CATALYST_TAXONOMY = {
+    "Gaming, IT & Digital Platforms": {
+        "keywords": ["gaming", "metaverse", "software", "information technology", "digital", "saas", "cloud"],
+        "tailwinds": [
+            "Asset-Light Operating Leverage: Negligible physical capex allows rapid incremental margin expansion.",
+            "Digital Monetization: High global scalability with immediate billing realization."
+        ]
+    },
     "Capital Goods & Defense": {
         "keywords": ["defense", "aerospace", "valve", "pump", "casting", "forging", "machining", "cnc", "industrial machinery", "tool", "taps"],
         "tailwinds": [
@@ -50,13 +57,6 @@ CATALYST_TAXONOMY = {
         "tailwinds": [
             "National Infra Outlays: Beneficiary of strategic transit corridors and highway capex.",
             "Execution Moat: Specialized civil works command protected margins vs plain contractors."
-        ]
-    },
-    "Auto Ancillaries & Precision Parts": {
-        "keywords": ["auto ancillary", "bearing", "gear", "piston", "ev", "electric vehicle", "transmission", "sheet metal", "castings"],
-        "tailwinds": [
-            "Second-Order Engine: OEM production surge directly drives supplier order volumes.",
-            "Content Enhancement: Transition to precision-engineered components lifts unit margins."
         ]
     },
     "Consumer Retail & Distribution": {
@@ -108,18 +108,20 @@ def send_telegram_alert(message: str) -> bool:
         print(f"Failed to deliver Telegram notification: {e}", file=sys.stderr)
         return False
 
-def get_company_profile(session: requests.Session, company_path: str) -> tuple[str, str]:
+def get_company_details(session: requests.Session, company_path: str) -> tuple[str, str, float]:
+    """Extracts Sector, About text, and genuine latest Annual Operating Cash Flow (CFO)."""
     if not company_path:
-        return "Industrial Ancillary", "Niche supplier serving core industry verticals."
+        return "Industrial Ancillary", "Niche supplier serving core industry verticals.", 0.0
         
     full_url = BASE_URL + company_path if company_path.startswith("/") else f"{BASE_URL}/{company_path}"
     try:
         resp = session.get(full_url, timeout=10)
         if resp.status_code != 200:
-            return "Industrial Ancillary", "Niche supplier serving core industry verticals."
+            return "Industrial Ancillary", "Niche supplier serving core industry verticals.", 0.0
             
         soup = BeautifulSoup(resp.text, "html.parser")
         
+        # 1. Sector
         sector = "Industrial Ancillary"
         peers_section = soup.find("section", id="peers")
         if peers_section:
@@ -127,16 +129,30 @@ def get_company_profile(session: requests.Session, company_path: str) -> tuple[s
             if sector_tag:
                 sector = sector_tag.get_text(strip=True)
 
+        # 2. About Description
         about_div = soup.find("div", class_="about") or soup.find("div", class_="company-profile")
         description = "Niche supplier serving core industry verticals."
         if about_div:
             p_tag = about_div.find("p")
             if p_tag:
                 description = p_tag.get_text(strip=True)
-                
-        return sector, description
+
+        # 3. Direct Annual Cash Flow Extraction
+        real_cfo = 0.0
+        cashflow_sec = soup.find("section", id="cash-flow")
+        if cashflow_sec:
+            table = cashflow_sec.find("table", class_="data-table")
+            if table:
+                for row in table.find_all("tr"):
+                    cells = [td.get_text(strip=True) for td in row.find_all("td")]
+                    if cells and ("cash from operating activity" in cells[0].lower() or "operating cash" in cells[0].lower()):
+                        # Get the latest reported annual figure (last column)
+                        real_cfo = clean_float(cells[-1])
+                        break
+                        
+        return sector, description, real_cfo
     except Exception:
-        return "Industrial Ancillary", "Niche supplier serving core industry verticals."
+        return "Industrial Ancillary", "Niche supplier serving core industry verticals.", 0.0
 
 def fetch_screener_stocks(url: str) -> tuple[list[dict], requests.Session]:
     session = requests.Session()
@@ -168,7 +184,6 @@ def fetch_screener_stocks(url: str) -> tuple[list[dict], requests.Session]:
         raw_headers = [th.get_text(strip=True) for th in thead.find_all("th")] if thead else []
         headers = [h.lower() for h in raw_headers]
 
-        # Explicit header index resolver
         def find_exact_col(positive_needles, negative_needles=None):
             if negative_needles is None:
                 negative_needles = []
@@ -184,15 +199,8 @@ def fetch_screener_stocks(url: str) -> tuple[list[dict], requests.Session]:
         idx_cmp = find_exact_col(["cmp rs", "cmp", "current price", "price"])
         idx_pe = find_exact_col(["p/e", "price to earning"])
         idx_mcap = find_exact_col(["mar cap", "market cap"])
-        
-        # 1. NP Qtr (Must NOT be Var or Growth)
         idx_pat = find_exact_col(["np qtr", "net profit latest quarter", "profit after tax latest quarter"], negative_needles=["var", "growth", "div"])
-        
-        # 2. Qtr Profit Var (Must NOT be Div or Yield)
         idx_growth = find_exact_col(["qtr profit var", "profit var", "yoy quarterly profit growth"], negative_needles=["div", "yield"])
-        
-        # 3. Cash from operations
-        idx_cfo = find_exact_col(["cash from operations", "cfo last year", "cfo"])
 
         tbody = table.find("tbody") or table
         rows = tbody.find_all("tr")
@@ -223,8 +231,7 @@ def fetch_screener_stocks(url: str) -> tuple[list[dict], requests.Session]:
                 "pe": get_val(idx_pe, 3, "N/A"),
                 "mcap": get_val(idx_mcap, 4, "N/A"),
                 "pat": get_val(idx_pat, 6, "0"),
-                "profit_growth": get_val(idx_growth, 7, "0.00"),
-                "cfo": get_val(idx_cfo, 8, "0")
+                "profit_growth": get_val(idx_growth, 7, "0.00")
             })
         
         if len(data_rows) < 25:
@@ -234,53 +241,6 @@ def fetch_screener_stocks(url: str) -> tuple[list[dict], requests.Session]:
         time.sleep(1.5)
         
     return stocks, session
-
-def calculate_conviction_score(stock: dict) -> tuple[bool, float]:
-    cfo = clean_float(stock.get("cfo", "0"))
-    pat = clean_float(stock.get("pat", "0"))
-    growth = clean_float(stock.get("profit_growth", "0"))
-    mcap = clean_float(stock.get("mcap", "0"))
-    pe = clean_float(stock.get("pe", "0"))
-
-    # Hard filters: Eliminate micro shell entities (<₹20 Cr) and extreme P/Es
-    if mcap < 20.0 or pe <= 0 or pe > 35.0:
-        return False, 0.0
-
-    score = 0.0
-
-    # 1. Earnings Acceleration Factor (Max 40 pts)
-    if growth >= 50.0:
-        score += 40.0
-    elif growth >= 25.0:
-        score += 30.0
-    elif growth >= 15.0:
-        score += 15.0
-    else:
-        score += 5.0
-
-    # 2. Valuation Expansion Runway (Max 30 pts)
-    if 5.0 <= pe <= 15.0:
-        score += 30.0
-    elif 15.0 < pe <= 24.0:
-        score += 20.0
-    else:
-        score += 10.0
-
-    # 3. Cash Flow Verification (Max 30 pts)
-    annualized_pat = pat * 4 if pat > 0 else 1.0
-    if cfo > 0:
-        conversion = (cfo / annualized_pat) if annualized_pat > 0 else 0
-        if conversion >= 0.5:
-            score += 30.0
-        elif conversion >= 0.2:
-            score += 20.0
-        else:
-            score += 10.0
-    else:
-        score -= 5.0
-
-    passes = (score >= 45.0) and (growth >= 15.0)
-    return passes, score
 
 def identify_structural_catalyst(sector: str, description: str, stock: dict) -> tuple[str, list[str]]:
     text = (sector + " " + description).lower()
@@ -301,7 +261,7 @@ def identify_structural_catalyst(sector: str, description: str, stock: dict) -> 
         
     if not matched_theme:
         matched_theme = sector if sector not in ["Diversified", "General", "Commodities"] else "Niche Engineering Ancillary"
-        tailwinds.append("Second-Order Beneficiary: Positioned to capture ancillary demand from Tier-1 corporate expansion.")
+        tailwinds.append("Second-Order Beneficiary: Positioned to capture ancillary demand from primary industry volume expansion.")
 
     return matched_theme, tailwinds
 
@@ -312,55 +272,76 @@ def send_ranked_conviction_alerts(stocks: list, session: requests.Session):
 
     scored_stocks = []
     for s in stocks:
-        passes, score = calculate_conviction_score(s)
-        s["conviction_score"] = score
-        s["strict_pass"] = passes
+        growth = clean_float(s.get("profit_growth", "0"))
+        pe = clean_float(s.get("pe", "0"))
+        mcap = clean_float(s.get("mcap", "0"))
+
+        if mcap < 20.0 or pe <= 0 or pe > 35.0:
+            continue
+
+        # Preliminary scoring based on screen metrics
+        score = 0.0
+        if growth >= 50.0:
+            score += 40.0
+        elif growth >= 25.0:
+            score += 30.0
+        elif growth >= 15.0:
+            score += 15.0
+        else:
+            score += 5.0
+
+        if 5.0 <= pe <= 15.0:
+            score += 30.0
+        elif 15.0 < pe <= 24.0:
+            score += 20.0
+        else:
+            score += 10.0
+
+        s["pre_score"] = score
         scored_stocks.append(s)
 
-    # Sort descending by conviction score
-    strict_passed = [s for s in scored_stocks if s["strict_pass"]]
-    if strict_passed:
-        top_picks = sorted(strict_passed, key=lambda x: x["conviction_score"], reverse=True)[:5]
-    else:
-        top_picks = sorted(scored_stocks, key=lambda x: x["conviction_score"], reverse=True)[:5]
+    # Sort and take top 5 candidates to pull verified cash flows
+    top_candidates = sorted(scored_stocks, key=lambda x: x["pre_score"], reverse=True)[:5]
 
-    total = len(top_picks)
+    total = len(top_candidates)
     chunk_size = 3
     total_parts = (total + chunk_size - 1) // chunk_size
 
     for idx in range(0, total, chunk_size):
-        batch = top_picks[idx:idx + chunk_size]
+        batch = top_candidates[idx:idx + chunk_size]
         part_num = (idx // chunk_size) + 1
         
         msg = f"🔥 *High-Conviction Multibagger Picks* ({part_num}/{total_parts})\n"
         msg += "━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
         
         for s in batch:
-            sector, about_text = get_company_profile(session, s.get("href", ""))
+            sector, about_text, real_cfo = get_company_details(session, s.get("href", ""))
             theme_name, catalyst_points = identify_structural_catalyst(sector, about_text, s)
             
-            cfo = clean_float(s.get("cfo", "0"))
             pat = clean_float(s.get("pat", "0"))
             growth = clean_float(s.get("profit_growth", "0"))
             growth_sign = "+" if growth > 0 else ""
             
             annualized_pat = pat * 4
-            if cfo <= 0:
-                cash_badge = "⚠️ Low/Zero CFO"
-            elif annualized_pat > 0 and (cfo / annualized_pat) >= 0.5:
-                conv_pct = round((cfo / annualized_pat) * 100)
+            if real_cfo <= 0:
+                cash_badge = "⚠️ Negative Cash Flow (CFO ≤ 0)"
+                final_score = max(35, s["pre_score"] - 10)
+            elif annualized_pat > 0 and (real_cfo / annualized_pat) >= 0.5:
+                conv_pct = round((real_cfo / annualized_pat) * 100)
                 cash_badge = f"✅ Strong Conversion (~{conv_pct}% CFO/PAT)"
+                final_score = min(100, s["pre_score"] + 30)
             else:
                 cash_badge = "⚠️ Moderate Cash Flow"
+                final_score = min(100, s["pre_score"] + 15)
 
             short_about = (about_text[:115] + "...") if len(about_text) > 115 else about_text
             bullets = "\n".join([f"    • {p}" for p in catalyst_points])
             
-            msg += f"🏢 *{s['name']}* (Score: `{s['conviction_score']:.0f}/100`)\n"
+            msg += f"🏢 *{s['name']}* (Score: `{final_score:.0f}/100`)\n"
             msg += f"├ 💰 *Valuation:* ₹{s['cmp']} | *P/E:* {s['pe']}x | *MCap:* ₹{s['mcap']} Cr\n"
             msg += f"├ 📈 *Earnings Velocity:* Qtr PAT Var: {growth_sign}{s['profit_growth']}%\n"
             msg += f"├ 🛡️ *Cash Quality:* {cash_badge}\n"
-            msg += f"│   `CFO: ₹{cfo:.1f} Cr | Qtr PAT: ₹{pat:.1f} Cr`\n"
+            msg += f"│   `Annual CFO: ₹{real_cfo:.1f} Cr | Qtr PAT: ₹{pat:.1f} Cr`\n"
             msg += f"├ 🏭 *Theme:* {theme_name}\n"
             msg += f"│   _{short_about}_\n"
             msg += f"└ 🚀 *Catalysts & Tailwinds:*\n{bullets}\n\n"

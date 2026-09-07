@@ -47,6 +47,46 @@
       "href": "/company/SRM/consolidated/",
       "score": 100,
       "theme": "Infrastructure & Construction"
+    },
+    "SWATIPRO": {
+      "first_alerted_date": "2026-09-07",
+      "first_alerted_price": 37.64,
+      "latest_price": 37.64,
+      "href": "/company/543914/consolidated/",
+      "score": 100,
+      "theme": "Financial Services"
+    },
+    "CRSTCHM": {
+      "first_alerted_date": "2026-09-07",
+      "first_alerted_price": 137.5,
+      "latest_price": 137.5,
+      "href": "/company/526269/",
+      "score": 100,
+      "theme": "Chemicals & Specialized Materials"
+    },
+    "META": {
+      "first_alerted_date": "2026-09-07",
+      "first_alerted_price": 8.79,
+      "latest_price": 8.79,
+      "href": "/company/534535/consolidated/",
+      "score": 100,
+      "theme": "Gaming, IT & Digital Platforms"
+    },
+    "SRM": {
+      "first_alerted_date": "2026-09-07",
+      "first_alerted_price": 462.35,
+      "latest_price": 462.35,
+      "href": "/company/SRM/consolidated/",
+      "score": 100,
+      "theme": "Infrastructure & Construction"
+    },
+    "BGWTATO": {
+      "first_alerted_date": "2026-09-07",
+      "first_alerted_price": 663.45,
+      "latest_price": 663.45,
+      "href": "/company/504646/",
+      "score": 100,
+      "theme": "Capital Goods & Defense"
     }
   }
 }

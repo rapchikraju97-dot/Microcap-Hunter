@@ -3,7 +3,7 @@
     "Swati Projects": {
       "first_alerted_date": "2026-09-02",
       "first_alerted_price": 43.89,
-      "latest_price": 38.0,
+      "latest_price": 39.0,
       "href": "/company/543914/consolidated/",
       "score": 100,
       "theme": "Financial Services"
@@ -19,7 +19,7 @@
     "Crestchem": {
       "first_alerted_date": "2026-09-02",
       "first_alerted_price": 132.05,
-      "latest_price": 164.0,
+      "latest_price": 166.0,
       "href": "/company/526269/",
       "score": 100,
       "theme": "Chemicals & Specialized Materials"
@@ -27,7 +27,7 @@
     "String Metaverse": {
       "first_alerted_date": "2026-09-02",
       "first_alerted_price": 8.9,
-      "latest_price": 8.3,
+      "latest_price": 7.99,
       "href": "/company/534535/consolidated/",
       "score": 100,
       "theme": "Gaming, IT & Digital Platforms"
@@ -43,7 +43,7 @@
     "SRM Contractors": {
       "first_alerted_date": "2026-09-04",
       "first_alerted_price": 465.0,
-      "latest_price": 415.0,
+      "latest_price": 407.0,
       "href": "/company/SRM/consolidated/",
       "score": 100,
       "theme": "Infrastructure & Construction"
@@ -103,6 +103,14 @@
       "href": "/company/544157/",
       "score": 95.0,
       "theme": "Infrastructure & Construction"
+    },
+    "Ovobel Foods": {
+      "first_alerted_date": "2026-09-28",
+      "first_alerted_price": 272.5,
+      "latest_price": 272.5,
+      "href": "/company/530741/",
+      "score": 95.0,
+      "theme": "Consumer Retail & Distribution"
     }
   }
 }

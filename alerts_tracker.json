@@ -3,7 +3,7 @@
     "Swati Projects": {
       "first_alerted_date": "2026-09-02",
       "first_alerted_price": 43.89,
-      "latest_price": 50.63,
+      "latest_price": 50.25,
       "href": "/company/543914/consolidated/",
       "score": 100,
       "theme": "Financial Services"
@@ -19,7 +19,7 @@
     "Crestchem": {
       "first_alerted_date": "2026-09-02",
       "first_alerted_price": 132.05,
-      "latest_price": 131.1,
+      "latest_price": 143.8,
       "href": "/company/526269/",
       "score": 100,
       "theme": "Chemicals & Specialized Materials"
@@ -27,7 +27,7 @@
     "String Metaverse": {
       "first_alerted_date": "2026-09-02",
       "first_alerted_price": 8.9,
-      "latest_price": 6.65,
+      "latest_price": 7.18,
       "href": "/company/534535/consolidated/",
       "score": 100,
       "theme": "Gaming, IT & Digital Platforms"
@@ -43,7 +43,7 @@
     "SRM Contractors": {
       "first_alerted_date": "2026-09-04",
       "first_alerted_price": 465.0,
-      "latest_price": 385.8,
+      "latest_price": 373.85,
       "href": "/company/SRM/consolidated/",
       "score": 100,
       "theme": "Infrastructure & Construction"
@@ -111,6 +111,14 @@
       "href": "/company/530741/",
       "score": 95.0,
       "theme": "Consumer Retail & Distribution"
+    },
+    "Goel Construct.": {
+      "first_alerted_date": "2026-11-05",
+      "first_alerted_price": 528.4,
+      "latest_price": 528.4,
+      "href": "/company/544504/",
+      "score": 100,
+      "theme": "Infrastructure & Construction"
     }
   }
 }

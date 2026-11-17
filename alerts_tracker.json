@@ -11,7 +11,7 @@
     "Fonebox Retail": {
       "first_alerted_date": "2026-09-02",
       "first_alerted_price": 99.0,
-      "latest_price": 128.75,
+      "latest_price": 126.3,
       "href": "/company/FONEBOX/",
       "score": 100,
       "theme": "Consumer Retail & Distribution"
@@ -27,7 +27,7 @@
     "String Metaverse": {
       "first_alerted_date": "2026-09-02",
       "first_alerted_price": 8.9,
-      "latest_price": 7.5,
+      "latest_price": 7.87,
       "href": "/company/534535/consolidated/",
       "score": 100,
       "theme": "Gaming, IT & Digital Platforms"
@@ -115,7 +115,7 @@
     "Goel Construct.": {
       "first_alerted_date": "2026-11-05",
       "first_alerted_price": 528.4,
-      "latest_price": 543.0,
+      "latest_price": 560.95,
       "href": "/company/544504/",
       "score": 100,
       "theme": "Infrastructure & Construction"
@@ -131,7 +131,7 @@
     "Positron Energy": {
       "first_alerted_date": "2026-11-16",
       "first_alerted_price": 263.1,
-      "latest_price": 263.1,
+      "latest_price": 267.15,
       "href": "/company/POSITRON/",
       "score": 95.0,
       "theme": "Consumer Retail & Distribution"

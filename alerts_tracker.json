@@ -27,7 +27,7 @@
     "String Metaverse": {
       "first_alerted_date": "2026-09-02",
       "first_alerted_price": 8.9,
-      "latest_price": 8.25,
+      "latest_price": 8.63,
       "href": "/company/534535/consolidated/",
       "score": 100,
       "theme": "Gaming, IT & Digital Platforms"
@@ -131,10 +131,18 @@
     "Positron Energy": {
       "first_alerted_date": "2026-11-16",
       "first_alerted_price": 263.1,
-      "latest_price": 280.5,
+      "latest_price": 294.5,
       "href": "/company/POSITRON/",
       "score": 95.0,
       "theme": "Consumer Retail & Distribution"
+    },
+    "Amtech Esters": {
+      "first_alerted_date": "2026-11-19",
+      "first_alerted_price": 78.0,
+      "latest_price": 78.0,
+      "href": "/company/544920/consolidated/",
+      "score": 95.0,
+      "theme": "Chemicals & Specialized Materials"
     }
   }
 }

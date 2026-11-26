@@ -11,7 +11,7 @@
     "Fonebox Retail": {
       "first_alerted_date": "2026-09-02",
       "first_alerted_price": 99.0,
-      "latest_price": 125.0,
+      "latest_price": 122.0,
       "href": "/company/FONEBOX/",
       "score": 100,
       "theme": "Consumer Retail & Distribution"
@@ -27,7 +27,7 @@
     "String Metaverse": {
       "first_alerted_date": "2026-09-02",
       "first_alerted_price": 8.9,
-      "latest_price": 9.51,
+      "latest_price": 9.49,
       "href": "/company/534535/consolidated/",
       "score": 100,
       "theme": "Gaming, IT & Digital Platforms"
@@ -35,7 +35,7 @@
     "Adisoft Technol.": {
       "first_alerted_date": "2026-09-02",
       "first_alerted_price": 200.0,
-      "latest_price": 258.2,
+      "latest_price": 264.3,
       "href": "/company/ADISOFT/consolidated/",
       "score": 95.0,
       "theme": "Gaming, IT & Digital Platforms"
@@ -143,6 +143,14 @@
       "href": "/company/544920/consolidated/",
       "score": 95.0,
       "theme": "Chemicals & Specialized Materials"
+    },
+    "Sanghvi Brands": {
+      "first_alerted_date": "2026-11-26",
+      "first_alerted_price": 20.68,
+      "latest_price": 20.68,
+      "href": "/company/540782/consolidated/",
+      "score": 95.0,
+      "theme": "Leisure Services"
     }
   }
 }
